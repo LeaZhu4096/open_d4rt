@@ -55,7 +55,7 @@ Rebuilding requires Visual Studio C++ Build Tools and the MNN Windows Vulkan bui
 Install these in the Python environment used to run the pipeline:
 
 ```bash
-pip install numpy opencv-python viser
+pip install -r requirements_mnn_vulkan.txt
 ```
 
 `ffmpeg` is optional but recommended. If it is not installed, the script falls back to OpenCV's mp4 writer output.
