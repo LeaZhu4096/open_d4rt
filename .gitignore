@@ -16,6 +16,9 @@ venv/
 /checkpoints/**/*.ckpt
 /checkpoints/**/*.pth
 
+# converted encoder decoder MNNs and their weights are too big to be included.
+artifacts/mnn_vulkan/
+
 .claude/
 .codex/
 .cursorignore
