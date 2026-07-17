@@ -85,7 +85,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video", required=True, type=Path, help="Input video path.")
     parser.add_argument("--output-dir", required=True, type=Path, help="Output demo package directory.")
     parser.add_argument("--encoder", type=Path, default=default_artifacts / "opend4rt_32clip_encoder_t32_256.mnn")
-    parser.add_argument("--decoder", type=Path, default=default_artifacts / "opend4rt_32clip_decoder_mem4097_q8.mnn")
+    parser.add_argument(
+        "--decoder",
+        type=Path,
+        default=default_artifacts / "decoder_mem4097_q8" / "opend4rt_32clip_decoder_mem4097_q8.mnn",
+    )
     parser.add_argument("--runner", type=Path, default=default_artifacts / "mnn_opend4rt_video_infer.exe")
     parser.add_argument("--build-runner", action="store_true", help="Build the C++ runner before inference on Windows.")
     parser.add_argument("--forward-type", type=int, default=7, help="MNN forward type. 7=Vulkan, 0=CPU.")
@@ -250,7 +254,19 @@ def _run_runner(args: argparse.Namespace, runtime_dir: Path, total_queries: int)
     ]
     env = os.environ.copy()
     env["PATH"] = str(args.runner.parent) + os.pathsep + env.get("PATH", "")
-    subprocess.run(cmd, cwd=str(REPO_ROOT), env=env, check=True)
+    result = subprocess.run(cmd, cwd=str(REPO_ROOT), env=env, text=True, capture_output=True)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode != 0:
+        if result.returncode == 3221225477:
+            raise RuntimeError(
+                "MNN native runner crashed with Windows access violation 0xC0000005. "
+                "This usually indicates a crash inside the selected MNN backend or GPU driver. "
+                "Check the last [mnn-video] stage above to see whether it happened during encoder or decoder execution."
+            )
+        raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
 
 
 def main() -> int:
@@ -330,46 +346,49 @@ def main() -> int:
     ref0_k = np.asarray([[focal, 0.0, (args.width - 1) * 0.5], [0.0, focal, (args.height - 1) * 0.5], [0.0, 0.0, 1.0]], dtype=np.float32)
 
     data = {
-        "video_width": int(args.width),
-        "video_height": int(args.height),
-        "num_frames": int(t),
-        "clip_frames": int(t),
-        "track_query_uv_px": _jsonable(track_uv_px),
-        "track_query_t_src": _jsonable(np.full((tr,), int(args.track_source_frame), dtype=np.int64)),
-        "track_xyz_ref0": _jsonable(track_xyz_ref0),
-        "track_uv_px": _jsonable(track_uv_px_pred),
-        "track_visibility": _jsonable(track_vis),
-        "track_confidence": _jsonable(track_conf),
-        "track_stitch_diagnostics": {"mode": "single_clip_mnn", "clip_frames": int(t), "chunks": []},
-        "point_query_uv_px": _jsonable(point_uv_px),
-        "point_xyz_ref0": _jsonable(point_xyz),
-        "point_visibility": _jsonable(point_vis),
-        "point_uv_px": _jsonable(point_uv_px_seq),
-        "point_confidence": _jsonable(point_conf),
-        "point_motion_score": _jsonable(motion_score),
-        "point_is_dynamic": _jsonable(point_is_dynamic),
-        "point_rgb": _jsonable(point_rgb),
-        "bounds_min": _jsonable(bounds_min),
-        "bounds_max": _jsonable(bounds_max),
-        "bounds_center": _jsonable(bounds_center),
-        "bounds_radius": _jsonable(bounds_radius),
-        "ref0_K": _jsonable(ref0_k),
-        "camera_K_seq": None,
-        "camera_T_ref0_cam": None,
-        "pred_camera_K_seq": None,
-        "pred_camera_T_ref0_cam": None,
-        "pred_camera_valid_intrinsics": None,
-        "pred_camera_valid_extrinsics": None,
         "meta": {
+            "videoWidth": int(args.width),
+            "videoHeight": int(args.height),
+            "numFrames": int(t),
+            "fps": float(fps),
+            "clipFrames": int(t),
+            "bounds": {
+                "min": _jsonable(bounds_min),
+                "max": _jsonable(bounds_max),
+                "center": _jsonable(bounds_center),
+                "radius": float(bounds_radius.reshape(-1)[0]),
+            },
+            "ref0K": _jsonable(ref0_k),
             "runtime": "mnn_split_vulkan" if args.forward_type == 7 else "mnn_split_cpu",
             "encoder": str(args.encoder),
             "decoder": str(args.decoder),
-            "query_batch": int(args.query_batch),
-            "total_queries": int(total_queries),
-            "source_video": str(args.video),
+            "queryBatch": int(args.query_batch),
+            "totalQueries": int(total_queries),
+            "sourceVideo": str(args.video),
+            "camera": None,
+            "cameraPred": None,
         },
+        "points": {
+            "queryUvPx": _jsonable(point_uv_px),
+            "xyzRef0": _jsonable(point_xyz),
+            "visibility": _jsonable(point_vis),
+            "uvPx": _jsonable(point_uv_px_seq),
+            "confidence": _jsonable(point_conf),
+            "motionScore": _jsonable(motion_score),
+            "isDynamic": _jsonable(point_is_dynamic),
+            "rgb": _jsonable(point_rgb),
+        },
+        "tracks": {
+            "queryUvPx": _jsonable(track_uv_px),
+            "queryTSrc": _jsonable(np.full((tr,), int(args.track_source_frame), dtype=np.int64)),
+            "xyzRef0": _jsonable(track_xyz_ref0),
+            "uvPx": _jsonable(track_uv_px_pred),
+            "visibility": _jsonable(track_vis),
+            "confidence": _jsonable(track_conf),
+            "stitchDiagnostics": {"mode": "single_clip_mnn", "clipFrames": int(t), "chunks": []},
+        },
+        "tracksGt": None,
     }
-
     assets_dir = args.output_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
     (assets_dir / "demo_data.json").write_text(json.dumps(data, ensure_ascii=True), encoding="utf-8")
@@ -395,7 +414,7 @@ def main() -> int:
         "portable_files_needed": [
             "artifacts/mnn_vulkan/opend4rt_32clip_encoder_t32_256.mnn",
             "artifacts/mnn_vulkan/opend4rt_32clip_encoder_t32_256.mnn.weight",
-            "artifacts/mnn_vulkan/opend4rt_32clip_decoder_mem4097_q8.mnn",
+            "artifacts/mnn_vulkan/decoder_mem4097_q8/opend4rt_32clip_decoder_mem4097_q8.mnn",
             "artifacts/mnn_vulkan/mnn_opend4rt_video_infer.exe",
             "artifacts/mnn_vulkan/MNN.dll",
             "scripts/infer_mnn_video_to_vis.py",

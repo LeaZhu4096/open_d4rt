@@ -133,6 +133,7 @@ int main(int argc, char** argv) {
         }
         fs::create_directories(outputDir);
 
+        std::cout << "[mnn-video] reading inputs\n" << std::flush;
         auto video = readBinary<float>(inputDir / "video_f32.bin", static_cast<size_t>(numFrames) * 3 * height * width);
         auto aspect = readBinary<float>(inputDir / "aspect_ratio_f32.bin", 1);
         auto queryU = readBinary<float>(inputDir / "query_u_f32.bin", totalQueries);
@@ -141,12 +142,18 @@ int main(int argc, char** argv) {
         auto queryTTgt = readBinary<int32_t>(inputDir / "query_t_tgt_i32.bin", totalQueries);
         auto queryTCam = readBinary<int32_t>(inputDir / "query_t_cam_i32.bin", totalQueries);
 
+        std::cout << "[mnn-video] loading encoder: " << encoderPath << "\n" << std::flush;
         std::shared_ptr<MNN::Interpreter> encoder(MNN::Interpreter::createFromFile(encoderPath.c_str()), MNN::Interpreter::destroy);
+        if (!encoder) {
+            throw std::runtime_error("Failed to open encoder model: " + encoderPath);
+        }
+        std::cout << "[mnn-video] loading decoder: " << decoderPath << "\n" << std::flush;
         std::shared_ptr<MNN::Interpreter> decoder(MNN::Interpreter::createFromFile(decoderPath.c_str()), MNN::Interpreter::destroy);
-        if (!encoder || !decoder) {
-            throw std::runtime_error("Failed to open encoder or decoder model");
+        if (!decoder) {
+            throw std::runtime_error("Failed to open decoder model: " + decoderPath);
         }
 
+        std::cout << "[mnn-video] creating sessions forward_type=" << static_cast<int>(forwardType) << "\n" << std::flush;
         auto* encSession = createSession(encoder.get(), forwardType);
         auto* decSession = createSession(decoder.get(), forwardType);
         if (encSession == nullptr || decSession == nullptr) {
@@ -161,6 +168,7 @@ int main(int argc, char** argv) {
             throw std::runtime_error("Missing required model inputs");
         }
 
+        std::cout << "[mnn-video] resizing tensors\n" << std::flush;
         encoder->resizeTensor(encVideo, {1, numFrames, 3, height, width});
         encoder->resizeTensor(encAspect, {1, 1});
         encoder->resizeSession(encSession);
@@ -174,14 +182,17 @@ int main(int argc, char** argv) {
         }
         decoder->resizeSession(decSession);
 
+        std::cout << "[mnn-video] copying inputs\n" << std::flush;
         copyFloatVectorToTensor(encVideo, video);
         copyFloatVectorToTensor(encAspect, aspect);
         copyFloatVectorToTensor(decVideo, video);
 
+        std::cout << "[mnn-video] running encoder\n" << std::flush;
         auto code = encoder->runSession(encSession);
         if (code != MNN::NO_ERROR) {
             throw std::runtime_error("encoder runSession failed: " + std::to_string(code));
         }
+        std::cout << "[mnn-video] encoder completed\n" << std::flush;
         auto* encMemory = encoder->getSessionOutput(encSession, "memory");
         if (encMemory == nullptr) {
             throw std::runtime_error("Missing encoder output: memory");
@@ -189,6 +200,7 @@ int main(int argc, char** argv) {
         auto memoryHost = makeHostTensor(encMemory);
         encMemory->copyToHostTensor(memoryHost.get());
         decMemory->copyFromHostTensor(memoryHost.get());
+        std::cout << "[mnn-video] memory copied to decoder\n" << std::flush;
 
         std::vector<float> xyz;
         std::vector<float> uv;
@@ -207,6 +219,7 @@ int main(int argc, char** argv) {
             copyIntBatchToTensor(decoder->getSessionInput(decSession, "t_tgt"), queryTTgt, offset, queryBatch, actual);
             copyIntBatchToTensor(decoder->getSessionInput(decSession, "t_cam"), queryTCam, offset, queryBatch, actual);
 
+            if (offset == 0) std::cout << "[mnn-video] running decoder batches\n" << std::flush;
             code = decoder->runSession(decSession);
             if (code != MNN::NO_ERROR) {
                 throw std::runtime_error("decoder runSession failed at query offset " + std::to_string(offset) + ": " + std::to_string(code));
