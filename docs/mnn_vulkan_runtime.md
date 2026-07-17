@@ -13,6 +13,38 @@ The current exported models are static for:
 - encoder memory tokens: 4097
 - decoder query batch: 8
 
+## Paper Setup vs Current Runtime
+
+| Item | D4RT paper | Current MNN/Vulkan runtime |
+| --- | --- | --- |
+| Clip frames | 48 frames | 32 frames |
+| Input resolution | 256x256 | 256x256 |
+| Checkpoint/config | Original D4RT training setup | OpenD4RT `32CLIP_9Dataset_NoAUG` checkpoint |
+| Training/inference mode | Training setup reported in the paper | Inference-only runtime |
+| Query count | 2048 random training queries per clip | User-controlled point/track queries |
+| Query distribution | Random, with region oversampling | Regular grid point-cloud queries plus selected tracks |
+| Decoder batch shape | Not exported as a fixed MNN shape | Static `q8`, meaning 8 queries per MNN decoder call |
+| Encoder memory tokens | Not stated this way in the paper | 4097 tokens for 32 frames at 256x256 |
+| Backend | TPU/PyTorch training context | MNN runtime on CPU or Vulkan |
+
+The current MNN artifacts are fixed-shape exports. Increasing the number of frames is not a runtime flag; it requires exporting a new encoder and decoder. For a 48-frame, 256x256 export, encoder memory would become:
+
+```text
+48 * 16 * 8 + 1 = 6145 memory tokens
+```
+
+The `q8` decoder batch is also fixed at export time. It does not limit total query count, but it controls how many queries are processed per decoder call. To use `q32` or `q64`, the decoder must be re-exported and re-converted.
+
+At inference, query count is controlled by visualization settings:
+
+```text
+point-cloud queries ~= 32 * max_points
+track queries       ~= 2 * 32 * max_tracks
+total queries       ~= 32 * max_points + 64 * max_tracks
+```
+
+For example, `--max-points 64 --max-tracks 8` produces `32*64 + 64*8 = 2560` decoder queries. This is close to the paper's 2048 training-query count, but the semantics differ: the runtime uses grid point-cloud queries plus selected tracks, while the paper's training queries are random and region-oversampled.
+
 ## Validation Status
 
 The following checks have already been completed for the current exported artifacts:
