@@ -4,7 +4,7 @@ This package runs the checkpoint-converted OpenD4RT split model without loading 
 
 ## What It Does
 
-Input video -> resize/sample to 32 frames at 256x256 -> MNN encoder -> MNN decoder in q8 batches -> 4D point cloud/tracks -> Viser demo package.
+Input video -> resize/sample to 32 frames at 256x256 -> MNN encoder -> MNN decoder in q2048 batches -> 4D point cloud/tracks -> Viser demo package.
 
 The current exported models are static for:
 
@@ -23,17 +23,13 @@ The current exported models are static for:
 | Training/inference mode | Training setup reported in the paper | Inference-only runtime |
 | Query count | 2048 random training queries per clip | User-controlled point/track queries |
 | Query distribution | Random, with region oversampling | Regular grid point-cloud queries plus selected tracks |
-| Decoder batch shape | Not exported as a fixed MNN shape | Static `q8`, meaning 8 queries per MNN decoder call |
+| Decoder batch shape | Not exported as a fixed MNN shape | Static `q2048`, meaning 8 queries per MNN decoder call |
 | Encoder memory tokens | Not stated this way in the paper | 4097 tokens for 32 frames at 256x256 |
 | Backend | TPU/PyTorch training context | MNN runtime on CPU or Vulkan |
 
-The current MNN artifacts are fixed-shape exports. Increasing the number of frames is not a runtime flag; it requires exporting a new encoder and decoder. For a 48-frame, 256x256 export, encoder memory would become:
+The current MNN artifacts are fixed-shape exports. Increasing the number of frames is not a runtime flag; it requires exporting a new encoder and decoder. 
 
-```text
-48 * 16 * 8 + 1 = 6145 memory tokens
-```
-
-The `q8` decoder batch is also fixed at export time. It does not limit total query count, but it controls how many queries are processed per decoder call. To use `q32` or `q64`, the decoder must be re-exported and re-converted.
+The `q2048` decoder batch is also fixed at export time. It does not limit total query count, but it controls how many queries are processed per decoder call. To use other batch size, the decoder must be re-exported and re-converted.
 
 At inference, query count is controlled by visualization settings:
 
@@ -53,7 +49,7 @@ The following checks have already been completed for the current exported artifa
 - The PyTorch full model and split encoder/decoder path were compared on a small test shape, with output diffs equal to 0.
 - The OpenD4RT checkpoint-backed encoder and decoder were exported to ONNX and converted to MNN.
 - The original-size encoder was converted for `32 frames / 256x256`; its large weights are stored externally in `opend4rt_32clip_encoder_t32_256.mnn.weight`.
-- The original-size decoder was converted as `artifacts/mnn_vulkan/decoder_mem4097_q8/opend4rt_32clip_decoder_mem4097_q8.mnn`.
+- The original-size decoder was converted as `artifacts/mnn_vulkan/decoder_mem4097_q2048/opend4rt_32clip_decoder_mem4097_q2048.mnn`.
 - A small split MNN pipeline was previously run through Windows MNN/Vulkan successfully.
 - The current video inference C++ runner has been compiled successfully, and the Python orchestration script passes syntax checks.
 - The decoder bundle was regenerated after a failed run showed that the old top-level decoder file was not self-contained.
@@ -69,7 +65,7 @@ artifacts/mnn_vulkan/MNN.dll
 artifacts/mnn_vulkan/mnn_opend4rt_video_infer.exe
 artifacts/mnn_vulkan/opend4rt_32clip_encoder_t32_256.mnn
 artifacts/mnn_vulkan/opend4rt_32clip_encoder_t32_256.mnn.weight
-artifacts/mnn_vulkan/decoder_mem4097_q8/opend4rt_32clip_decoder_mem4097_q8.mnn
+artifacts/mnn_vulkan/decoder_mem4097_q2048/opend4rt_32clip_decoder_mem4097_q2048.mnn
 scripts/infer_mnn_video_to_vis.py
 vis/serve_demo_viser.py
 requirements_mnn_vulkan.txt
@@ -158,8 +154,8 @@ http://127.0.0.1:8081
 
 ## Notes
 
-- The decoder MNN is fixed at q8, so the Python script automatically pads and batches queries in groups of 8.
+- The decoder MNN is fixed at q2048, so the Python script automatically pads and batches queries in groups of 2048.
 - The script uses one static 32-frame clip. Longer videos are uniformly sampled to 32 frames; shorter videos are padded by repeating the final frame.
 - The current laptop iGPU previously rebooted under full-size Vulkan load. For this machine, prefer `--forward-type 0` or run Vulkan on a stronger PC/GPU.
 - The checkpoint is not needed after conversion. The large external encoder weight file must stay next to the encoder `.mnn` file.
-- Use the decoder under `artifacts/mnn_vulkan/decoder_mem4097_q8/`; the old top-level decoder file should be treated as obsolete.
+- Use the decoder under `artifacts/mnn_vulkan/decoder_mem4097_q2048/`.
