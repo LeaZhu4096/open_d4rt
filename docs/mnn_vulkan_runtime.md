@@ -11,7 +11,7 @@ The current exported models are static for:
 - frames: 32
 - image size: 256x256
 - encoder memory tokens: 4097
-- decoder query batch: 8
+- decoder query batch: 2048
 
 ## Paper Setup vs Current Runtime
 
@@ -23,7 +23,7 @@ The current exported models are static for:
 | Training/inference mode | Training setup reported in the paper | Inference-only runtime |
 | Query count | 2048 random training queries per clip | User-controlled point/track queries |
 | Query distribution | Random, with region oversampling | Regular grid point-cloud queries plus selected tracks |
-| Decoder batch shape | Not exported as a fixed MNN shape | Static `q2048`, meaning 8 queries per MNN decoder call |
+| Decoder batch shape | Not exported as a fixed MNN shape | Static `q2048`, meaning 2048 queries per MNN decoder call |
 | Encoder memory tokens | Not stated this way in the paper | 4097 tokens for 32 frames at 256x256 |
 | Backend | TPU/PyTorch training context | MNN runtime on CPU or Vulkan |
 
