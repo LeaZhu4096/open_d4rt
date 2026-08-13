@@ -88,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--decoder",
         type=Path,
-        default=default_artifacts / "decoder_mem4097_q8" / "opend4rt_32clip_decoder_mem4097_q8.mnn",
+        default=default_artifacts / "decoder_mem4097_q2048" / "opend4rt_32clip_decoder_mem4097_q2048.mnn",
     )
     parser.add_argument("--runner", type=Path, default=default_artifacts / "mnn_opend4rt_video_infer.exe")
     parser.add_argument("--build-runner", action="store_true", help="Build the C++ runner before inference on Windows.")
@@ -96,11 +96,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-frames", type=int, default=32, help="Static frame count used by the exported encoder.")
     parser.add_argument("--height", type=int, default=256)
     parser.add_argument("--width", type=int, default=256)
-    parser.add_argument("--query-batch", type=int, default=8, help="Static decoder query count in the exported decoder.")
-    parser.add_argument("--point-cols", type=int, default=24)
-    parser.add_argument("--point-rows", type=int, default=24)
-    parser.add_argument("--max-points", type=int, default=576)
-    parser.add_argument("--max-tracks", type=int, default=48)
+    parser.add_argument("--query-batch", type=int, default=2048, help="Static decoder query count in the exported decoder.")
+    parser.add_argument("--point-cols", type=int, default=64)
+    parser.add_argument("--point-rows", type=int, default=64)
+    parser.add_argument("--max-points", type=int, default=4096)
+    parser.add_argument("--max-tracks", type=int, default=500)
     parser.add_argument("--track-source-frame", type=int, default=0)
     parser.add_argument("--keep-runtime-io", action="store_true", help="Keep raw binary files used to call the C++ runner.")
     return parser.parse_args()
@@ -414,7 +414,7 @@ def main() -> int:
         "portable_files_needed": [
             "artifacts/mnn_vulkan/opend4rt_32clip_encoder_t32_256.mnn",
             "artifacts/mnn_vulkan/opend4rt_32clip_encoder_t32_256.mnn.weight",
-            "artifacts/mnn_vulkan/decoder_mem4097_q8/opend4rt_32clip_decoder_mem4097_q8.mnn",
+            "artifacts/mnn_vulkan/decoder_mem4097_q2048/opend4rt_32clip_decoder_mem4097_q2048.mnn",
             "artifacts/mnn_vulkan/mnn_opend4rt_video_infer.exe",
             "artifacts/mnn_vulkan/MNN.dll",
             "scripts/infer_mnn_video_to_vis.py",

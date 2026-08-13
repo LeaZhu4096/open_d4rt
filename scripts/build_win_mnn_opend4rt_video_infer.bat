@@ -2,7 +2,7 @@
 setlocal
 
 set "REPO_ROOT=%~dp0.."
-set "MNN_ROOT=%REPO_ROOT%\..\d4rt-pytorch\third_party\MNN"
+set "MNN_ROOT=D:\d4rt_mnn-vulkan\third_party\MNN"
 set "VS_VCVARS=C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 if not exist "%VS_VCVARS%" (
     set "VS_VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
